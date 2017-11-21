@@ -2,6 +2,7 @@ from time import sleep
 from Queue import Queue, Empty
 import multiprocessing
 import threading
+import os
 
 from .config import is_backend, Backend
 
@@ -64,6 +65,9 @@ class Pipe:
         self._processes = []
         if not 'processes' in dargs:
             dargs['processes'] = 1
+        
+        if not 'env' in dargs:
+            dargs['env'] =  [{} for i in range(dargs['processes'])]
 
         for i in range(dargs['processes']):
             if is_backend(Backend.THREADING):
@@ -74,9 +78,10 @@ class Pipe:
                 pipeclass = _PipeDummy
 
             procname = "{0}{1}".format(self.__class__.__name__, i)
-            self._processes.append(pipeclass(name=procname, pipe_instance=self))
+            self._processes.append(pipeclass(name=procname, pipe_instance=self, env=dargs['env'][i]))
 
         del self._passthrough_dict_args['processes']
+        del self._passthrough_dict_args['env']
 
         self._started_operating = False
         self._results = None
@@ -155,8 +160,12 @@ class Pipe:
             if input_pipe:
                 input_pipe._start_operating()
 
+        parent_env = os.environ.copy()
         for p in self._processes:
+            os.environ = {**parent_env, **p.env}
             p.start()
+        
+        os.environ = parent_env
 
         for _, output_pipe in self._output_queues:
             if output_pipe:
@@ -175,9 +184,10 @@ class Pipe:
 
 class _PipeProcess(multiprocessing.Process):
 
-    def __init__(self, name, pipe_instance):
+    def __init__(self, name, pipe_instance, env):
         multiprocessing.Process.__init__(self, name=name)
         self.pipe = pipe_instance
+        self.env = env
         self._output_complete_event = multiprocessing.Event()
 
     def run(self):
@@ -216,9 +226,10 @@ class _PipeProcess(multiprocessing.Process):
 
 class _PipeThread(threading.Thread):
 
-    def __init__(self, name, pipe_instance):
+    def __init__(self, name, pipe_instance, env):
         threading.Thread.__init__(self, name=name)
         self.pipe = pipe_instance
+        self.env = env
         self._output_complete_event = threading.Event()
 
     def run(self):
@@ -257,8 +268,9 @@ class _PipeDummy:
     is directed and acyclic.
     """
 
-    def __init__(self, name, pipe_instance):
+    def __init__(self, name, pipe_instance, env):
         self.pipe = pipe_instance
+        self.env = env
         self._output_complete_event = threading.Event()
 
     def start(self):

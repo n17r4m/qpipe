@@ -186,6 +186,7 @@ class _PipeProcess(multiprocessing.Process):
 
     def __init__(self, name, pipe_instance, env):
         multiprocessing.Process.__init__(self, name=name)
+        self.daemon = True
         self.pipe = pipe_instance
         self.env = env
         self._output_complete_event = multiprocessing.Event()
@@ -228,6 +229,7 @@ class _PipeThread(threading.Thread):
 
     def __init__(self, name, pipe_instance, env):
         threading.Thread.__init__(self, name=name)
+        self.daemon = True
         self.pipe = pipe_instance
         self.env = env
         self._output_complete_event = threading.Event()
